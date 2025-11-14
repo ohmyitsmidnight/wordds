@@ -15,6 +15,7 @@ import CrosswordGrid from '../src/components/CrosswordGrid';
 import ClueList from '../src/components/ClueList';
 import { usePuzzleStore } from '../src/store/usePuzzleStore';
 import { useAuthStore } from '../src/store/useAuthStore';
+import { useWordsStore } from '../src/store/useWordsStore';
 import { generatePuzzleForApp } from '../src/utils/crosswordExamples';
 import { WordInput } from '../src/utils/crosswordGenerator';
 
@@ -30,89 +31,19 @@ interface Word {
 export default function PuzzleScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { words, fetchWords } = useWordsStore();
   const [showClues, setShowClues] = useState(false);
   const [activeClue, setActiveClue] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
+  const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
 
-  // Sample puzzle data - in production this would come from the store
   const [puzzle, setPuzzle] = useState<{
     id: string;
     size: number;
     words: Word[];
     title: string;
     difficulty: number;
-  }>({
-    id: 'sample-1',
-    size: 7,
-    title: 'Sample Puzzle',
-    difficulty: 3,
-    words: [
-      {
-        number: 1,
-        clue: 'Opposite of day',
-        answer: 'NIGHT',
-        startRow: 0,
-        startCol: 0,
-        direction: 'across',
-      },
-      {
-        number: 2,
-        clue: 'Large body of water',
-        answer: 'OCEAN',
-        startRow: 2,
-        startCol: 0,
-        direction: 'across',
-      },
-      {
-        number: 3,
-        clue: 'Hot beverage',
-        answer: 'COFFEE',
-        startRow: 4,
-        startCol: 0,
-        direction: 'across',
-      },
-      {
-        number: 4,
-        clue: 'Flying mammal',
-        answer: 'BAT',
-        startRow: 6,
-        startCol: 2,
-        direction: 'across',
-      },
-      {
-        number: 1,
-        clue: 'Not old',
-        answer: 'NEW',
-        startRow: 0,
-        startCol: 0,
-        direction: 'down',
-      },
-      {
-        number: 5,
-        clue: 'Frozen water',
-        answer: 'ICE',
-        startRow: 0,
-        startCol: 2,
-        direction: 'down',
-      },
-      {
-        number: 6,
-        clue: 'Citrus fruit',
-        answer: 'ORANGE',
-        startRow: 0,
-        startCol: 4,
-        direction: 'down',
-      },
-      {
-        number: 7,
-        clue: 'Feline animal',
-        answer: 'CAT',
-        startRow: 2,
-        startCol: 3,
-        direction: 'down',
-      },
-    ],
-  });
+  } | null>(null);
 
   useEffect(() => {
     loadPuzzleData();
@@ -122,29 +53,74 @@ export default function PuzzleScreen() {
     try {
       setLoading(true);
       
-      // Sample vocabulary words for demo
-      // In production, this would come from the user's word list
-      const vocabularyWords: WordInput[] = [
-        { word: 'SERENDIPITY', clue: 'Finding something good without looking for it' },
-        { word: 'COFFEE', clue: 'Popular caffeinated morning beverage' },
-        { word: 'OCEAN', clue: 'Large body of salt water' },
-        { word: 'FOREST', clue: 'Dense woodland area' },
-        { word: 'NIGHT', clue: 'Time when the sun is down' },
-        { word: 'ORANGE', clue: 'Citrus fruit high in vitamin C' },
-        { word: 'BANANA', clue: 'Yellow tropical fruit' },
-        { word: 'STAR', clue: 'Luminous celestial body' },
-        { word: 'MOON', clue: 'Natural satellite of Earth' },
-        { word: 'RIVER', clue: 'Natural flowing watercourse' },
-        { word: 'MOUNTAIN', clue: 'Large natural elevation of earth' },
-        { word: 'DESERT', clue: 'Arid region with little precipitation' },
-      ];
+      // Fetch user's words if not already loaded
+      if (words.length === 0) {
+        console.log('[Puzzle] Fetching user words...');
+        await fetchWords();
+      }
 
-      console.log('[Puzzle] Generating crossword from vocabulary words...');
+      // Check if user has any words
+      if (words.length === 0) {
+        setLoading(false);
+        Alert.alert(
+          'No Words Yet',
+          'Add some words to your vocabulary list first to generate puzzles!',
+          [
+            { text: 'Add Words', onPress: () => router.push('/words') },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        return;
+      }
+
+      // Filter words based on difficulty
+      let filteredWords = [...words];
+      
+      if (difficulty === 'easy') {
+        // Easy: Only words with mastery level >= 2 (somewhat familiar)
+        filteredWords = words.filter(w => w.mastery_level >= 2);
+      } else if (difficulty === 'medium') {
+        // Medium: Mix of learning words (mastery 0-3)
+        filteredWords = words.filter(w => w.mastery_level <= 3);
+      } else {
+        // Hard: Include all words, especially challenging ones
+        filteredWords = words.filter(w => w.mastery_level <= 2);
+      }
+
+      // If not enough words after filtering, use all words
+      if (filteredWords.length < 5) {
+        console.log('[Puzzle] Not enough filtered words, using all words');
+        filteredWords = [...words];
+      }
+
+      // Convert user words to WordInput format for generator
+      const vocabularyWords: WordInput[] = filteredWords.map(word => ({
+        word: word.word.toUpperCase().replace(/[^A-Z]/g, ''), // Remove special chars
+        clue: word.fetched_definition || word.definition || word.custom_definition || `Define: ${word.word}`,
+      })).filter(w => w.word.length >= 3 && w.word.length <= 15); // Filter valid words
+
+      if (vocabularyWords.length < 5) {
+        Alert.alert(
+          'Need More Words',
+          `You need at least 5 words to generate a puzzle. You have ${vocabularyWords.length} valid words. Add more words to your vocabulary!`,
+          [
+            { text: 'Add Words', onPress: () => router.push('/words') },
+            { text: 'Cancel', style: 'cancel' },
+          ]
+        );
+        setLoading(false);
+        return;
+      }
+
+      console.log(`[Puzzle] Generating ${difficulty} crossword from ${vocabularyWords.length} words...`);
+      
+      // Determine max words based on difficulty
+      const maxWords = difficulty === 'easy' ? 6 : difficulty === 'medium' ? 10 : 15;
       
       // Generate puzzle using the algorithm
       const generatedPuzzle = generatePuzzleForApp(vocabularyWords, {
-        difficulty: 'medium',
-        maxWords: 10,
+        difficulty,
+        maxWords,
       });
 
       if (generatedPuzzle) {
@@ -205,8 +181,35 @@ export default function PuzzleScreen() {
           style={styles.loadingContainer}
         >
           <ActivityIndicator size="large" color="#fff" />
-          <Text style={styles.loadingText}>Loading puzzle...</Text>
+          <Text style={styles.loadingText}>Generating puzzle from your words...</Text>
         </LinearGradient>
+      </SafeAreaView>
+    );
+  }
+
+  // Show message if no puzzle generated
+  if (!puzzle) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <LinearGradient colors={['#667eea', '#764ba2']} style={styles.header}>
+          <View style={styles.headerContent}>
+            <Pressable onPress={() => router.back()} style={styles.backButton}>
+              <Text style={styles.backButtonText}>← Back</Text>
+            </Pressable>
+          </View>
+        </LinearGradient>
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyIcon}>📚</Text>
+          <Text style={styles.emptyTitle}>No Puzzle Available</Text>
+          <Text style={styles.emptyText}>
+            Add some words to your vocabulary list to start generating puzzles!
+          </Text>
+          <Pressable onPress={() => router.push('/words')} style={styles.emptyButton}>
+            <LinearGradient colors={['#667eea', '#764ba2']} style={styles.emptyButtonGradient}>
+              <Text style={styles.emptyButtonText}>Go to Words</Text>
+            </LinearGradient>
+          </Pressable>
+        </View>
       </SafeAreaView>
     );
   }
@@ -220,9 +223,32 @@ export default function PuzzleScreen() {
           </Pressable>
           <View style={styles.headerInfo}>
             <Text style={styles.title}>{puzzle.title}</Text>
-            <Text style={styles.subtitle}>
-              Difficulty: {'⭐'.repeat(puzzle.difficulty)}
-            </Text>
+            <View style={styles.difficultySelector}>
+              <Pressable 
+                onPress={() => { setDifficulty('easy'); loadPuzzleData(); }}
+                style={[styles.difficultyButton, difficulty === 'easy' && styles.difficultyButtonActive]}
+              >
+                <Text style={[styles.difficultyButtonText, difficulty === 'easy' && styles.difficultyButtonTextActive]}>
+                  Easy
+                </Text>
+              </Pressable>
+              <Pressable 
+                onPress={() => { setDifficulty('medium'); loadPuzzleData(); }}
+                style={[styles.difficultyButton, difficulty === 'medium' && styles.difficultyButtonActive]}
+              >
+                <Text style={[styles.difficultyButtonText, difficulty === 'medium' && styles.difficultyButtonTextActive]}>
+                  Medium
+                </Text>
+              </Pressable>
+              <Pressable 
+                onPress={() => { setDifficulty('hard'); loadPuzzleData(); }}
+                style={[styles.difficultyButton, difficulty === 'hard' && styles.difficultyButtonActive]}
+              >
+                <Text style={[styles.difficultyButtonText, difficulty === 'hard' && styles.difficultyButtonTextActive]}>
+                  Hard
+                </Text>
+              </Pressable>
+            </View>
           </View>
           <Pressable
             onPress={() => setShowClues(!showClues)}
@@ -233,6 +259,9 @@ export default function PuzzleScreen() {
             </Text>
           </Pressable>
         </View>
+        <Pressable onPress={loadPuzzleData} style={styles.refreshButton}>
+          <Text style={styles.refreshButtonText}>🔄 New Puzzle</Text>
+        </Pressable>
       </LinearGradient>
 
       <View style={styles.content}>
@@ -317,7 +346,81 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 8,
+  },
+  difficultySelector: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 4,
+  },
+  difficultyButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.3)',
+  },
+  difficultyButtonActive: {
+    backgroundColor: '#fff',
+  },
+  difficultyButtonText: {
+    color: 'rgba(255, 255, 255, 0.9)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  difficultyButtonTextActive: {
+    color: '#667eea',
+  },
+  refreshButton: {
+    backgroundColor: 'rgba(255, 255, 255, 0.2)',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginTop: 12,
+    alignSelf: 'center',
+  },
+  refreshButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  emptyIcon: {
+    fontSize: 64,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#111827',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  emptyText: {
+    fontSize: 16,
+    color: '#6B7280',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 24,
+  },
+  emptyButton: {
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  emptyButtonGradient: {
+    paddingHorizontal: 32,
+    paddingVertical: 16,
+  },
+  emptyButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   subtitle: {
     fontSize: 14,
