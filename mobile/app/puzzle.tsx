@@ -15,6 +15,8 @@ import CrosswordGrid from '../src/components/CrosswordGrid';
 import ClueList from '../src/components/ClueList';
 import { usePuzzleStore } from '../src/store/usePuzzleStore';
 import { useAuthStore } from '../src/store/useAuthStore';
+import { generatePuzzleForApp } from '../src/utils/crosswordExamples';
+import { WordInput } from '../src/utils/crosswordGenerator';
 
 interface Word {
   number: number;
@@ -119,13 +121,49 @@ export default function PuzzleScreen() {
   const loadPuzzleData = async () => {
     try {
       setLoading(true);
-      // TODO: Load puzzle from store or API
-      // For now, using sample data
-      setTimeout(() => {
-        setLoading(false);
-      }, 500);
+      
+      // Sample vocabulary words for demo
+      // In production, this would come from the user's word list
+      const vocabularyWords: WordInput[] = [
+        { word: 'SERENDIPITY', clue: 'Finding something good without looking for it' },
+        { word: 'COFFEE', clue: 'Popular caffeinated morning beverage' },
+        { word: 'OCEAN', clue: 'Large body of salt water' },
+        { word: 'FOREST', clue: 'Dense woodland area' },
+        { word: 'NIGHT', clue: 'Time when the sun is down' },
+        { word: 'ORANGE', clue: 'Citrus fruit high in vitamin C' },
+        { word: 'BANANA', clue: 'Yellow tropical fruit' },
+        { word: 'STAR', clue: 'Luminous celestial body' },
+        { word: 'MOON', clue: 'Natural satellite of Earth' },
+        { word: 'RIVER', clue: 'Natural flowing watercourse' },
+        { word: 'MOUNTAIN', clue: 'Large natural elevation of earth' },
+        { word: 'DESERT', clue: 'Arid region with little precipitation' },
+      ];
+
+      console.log('[Puzzle] Generating crossword from vocabulary words...');
+      
+      // Generate puzzle using the algorithm
+      const generatedPuzzle = generatePuzzleForApp(vocabularyWords, {
+        difficulty: 'medium',
+        maxWords: 10,
+      });
+
+      if (generatedPuzzle) {
+        console.log('[Puzzle] Successfully generated puzzle with', generatedPuzzle.words.length, 'words');
+        setPuzzle({
+          id: `generated-${Date.now()}`,
+          size: generatedPuzzle.size,
+          title: 'Vocabulary Practice',
+          difficulty: 3,
+          words: generatedPuzzle.words,
+        });
+      } else {
+        console.error('[Puzzle] Failed to generate puzzle');
+        Alert.alert('Error', 'Failed to generate puzzle. Please try again.');
+      }
+      
+      setLoading(false);
     } catch (error) {
-      console.error('Failed to load puzzle:', error);
+      console.error('[Puzzle] Failed to load puzzle:', error);
       Alert.alert('Error', 'Failed to load puzzle');
       setLoading(false);
     }
