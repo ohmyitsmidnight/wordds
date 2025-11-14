@@ -1,0 +1,43 @@
+#!/bin/bash
+
+echo "🚀 Wordds Project Setup"
+echo "======================="
+echo ""
+
+# Check if Supabase project URL is set
+if ! grep -q "EXPO_PUBLIC_SUPABASE_URL=https://" mobile/.env 2>/dev/null; then
+    echo "⚠️  Supabase configuration needed!"
+    echo ""
+    echo "Please follow these steps:"
+    echo ""
+    echo "1. Create a Supabase project at https://supabase.com"
+    echo "2. Copy your project URL and anon key"
+    echo "3. Update mobile/.env with your credentials:"
+    echo "   EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co"
+    echo "   EXPO_PUBLIC_SUPABASE_ANON_KEY=your-anon-key"
+    echo ""
+    echo "4. Then run the database migrations:"
+    echo "   cd supabase"
+    echo "   supabase db push (if linked to remote project)"
+    echo "   OR"
+    echo "   Run the SQL files manually in Supabase SQL Editor"
+    echo ""
+fi
+
+echo "✅ Dependencies installed"
+echo ""
+echo "📱 To run the mobile app:"
+echo "   cd mobile"
+echo "   npx expo start"
+echo ""
+echo "📖 Read the documentation:"
+echo "   - GETTING_STARTED.md - Setup guide"
+echo "   - docs/SUPABASE_SETUP.md - Supabase configuration"
+echo "   - docs/FIREBASE_SETUP.md - Firebase Analytics setup"
+echo ""
+echo "🎯 Next steps:"
+echo "   1. Configure Supabase (see above)"
+echo "   2. Run database migrations"
+echo "   3. Start the development server"
+echo "   4. Build your first feature!"
+echo ""
