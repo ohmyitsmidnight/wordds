@@ -264,24 +264,45 @@ const CrosswordGrid: React.FC<CrosswordGridProps> = ({
 
   // Check current word
   const checkWord = () => {
-    if (!selectedCell) return;
+    if (!selectedCell) {
+      Alert.alert('No word selected', 'Please select a word first');
+      return;
+    }
+    
     const currentWord = getCurrentWord();
-    if (!currentWord) return;
+    if (!currentWord) {
+      Alert.alert('No word found', 'Please select a valid word');
+      return;
+    }
 
-    const { startRow, startCol, answer } = currentWord;
+    const { startRow, startCol, answer, direction: wordDirection } = currentWord;
     let isCorrect = true;
+    let hasEmptyCells = false;
 
     for (let i = 0; i < answer.length; i++) {
-      const row = direction === 'across' ? startRow : startRow + i;
-      const col = direction === 'across' ? startCol + i : startCol;
+      const row = wordDirection === 'across' ? startRow : startRow + i;
+      const col = wordDirection === 'across' ? startCol + i : startCol;
+      
+      if (!grid[row][col].letter) {
+        hasEmptyCells = true;
+        isCorrect = false;
+        break;
+      }
+      
       if (grid[row][col].letter !== answer[i]) {
         isCorrect = false;
         break;
       }
     }
 
-    if (isCorrect) {
-      Alert.alert('Correct! 🎉', 'You got this word right!');
+    if (hasEmptyCells) {
+      Alert.alert('Incomplete', 'Please fill in all letters first');
+    } else if (isCorrect) {
+      successScale.value = withSequence(
+        withSpring(1.1),
+        withSpring(1)
+      );
+      Alert.alert('✅ Correct!', 'You got this word right!');
     } else {
       shakeValue.value = withSequence(
         withSpring(-10),
@@ -290,40 +311,107 @@ const CrosswordGrid: React.FC<CrosswordGridProps> = ({
         withSpring(10),
         withSpring(0)
       );
-      Alert.alert('Not quite', 'Keep trying!');
+      Alert.alert('❌ Not quite', 'Keep trying!');
     }
   };
 
   // Reveal current word
   const revealWord = () => {
-    if (!selectedCell) return;
+    if (!selectedCell) {
+      Alert.alert('No word selected', 'Please select a word first');
+      return;
+    }
+    
     const currentWord = getCurrentWord();
-    if (!currentWord) return;
-
-    const { startRow, startCol, answer } = currentWord;
-    const newGrid = [...grid];
-
-    for (let i = 0; i < answer.length; i++) {
-      const row = direction === 'across' ? startRow : startRow + i;
-      const col = direction === 'across' ? startCol + i : startCol;
-      newGrid[row][col] = { ...newGrid[row][col], letter: answer[i] };
+    if (!currentWord) {
+      Alert.alert('No word found', 'Please select a valid word');
+      return;
     }
 
-    setGrid(newGrid);
+    const { startRow, startCol, answer, direction: wordDirection } = currentWord;
+    
+    setGrid((prevGrid) => {
+      const newGrid = prevGrid.map((row) => row.map((cell) => ({ ...cell })));
+
+      for (let i = 0; i < answer.length; i++) {
+        const row = wordDirection === 'across' ? startRow : startRow + i;
+        const col = wordDirection === 'across' ? startCol + i : startCol;
+        if (row < size && col < size) {
+          newGrid[row][col].letter = answer[i];
+        }
+      }
+
+      return newGrid;
+    });
+
+    // Show success animation
+    successScale.value = withSequence(
+      withSpring(1.1),
+      withSpring(1)
+    );
+
+    Alert.alert('✨ Revealed!', `The answer is: ${answer}`);
   };
 
   // Provide hint for current cell
   const giveHint = () => {
-    if (!selectedCell) return;
+    if (!selectedCell) {
+      Alert.alert('No cell selected', 'Please select a cell first');
+      return;
+    }
+    
     const { row, col } = selectedCell;
     const correctLetter = grid[row][col].answer;
 
     if (correctLetter) {
-      const newGrid = [...grid];
-      newGrid[row][col] = { ...newGrid[row][col], letter: correctLetter };
-      setGrid(newGrid);
+      setGrid((prevGrid) => {
+        const newGrid = prevGrid.map((r) => r.map((cell) => ({ ...cell })));
+        newGrid[row][col].letter = correctLetter;
+        return newGrid;
+      });
+      
+      Alert.alert('💡 Hint!', `The letter is: ${correctLetter}`);
       moveToNextCell();
+    } else {
+      Alert.alert('Invalid cell', 'This cell is not part of the puzzle');
     }
+  };
+
+  // Reveal entire puzzle
+  const revealAll = () => {
+    Alert.alert(
+      '🔍 Reveal Entire Puzzle?',
+      'This will show all answers. Are you sure?',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Reveal All',
+          style: 'destructive',
+          onPress: () => {
+            setGrid((prevGrid) => {
+              const newGrid = prevGrid.map((row) =>
+                row.map((cell) => ({
+                  ...cell,
+                  letter: cell.answer || cell.letter,
+                }))
+              );
+              return newGrid;
+            });
+
+            // Show success animation
+            successScale.value = withSequence(
+              withSpring(1.1),
+              withSpring(1)
+            );
+
+            Alert.alert('✨ Puzzle Revealed!', 'All answers are now visible');
+          },
+        },
+      ]
+    );
   };
 
   return (
@@ -389,7 +477,10 @@ const CrosswordGrid: React.FC<CrosswordGridProps> = ({
           <Text style={styles.controlButtonText}>Hint</Text>
         </Pressable>
         <Pressable style={styles.controlButton} onPress={revealWord}>
-          <Text style={styles.controlButtonText}>Reveal</Text>
+          <Text style={styles.controlButtonText}>Reveal Word</Text>
+        </Pressable>
+        <Pressable style={[styles.controlButton, styles.revealAllButton]} onPress={revealAll}>
+          <Text style={[styles.controlButtonText, styles.revealAllButtonText]}>Reveal All</Text>
         </Pressable>
       </View>
 
@@ -468,9 +559,11 @@ const styles = StyleSheet.create({
     gap: 12,
     marginTop: 24,
     paddingHorizontal: 20,
+    flexWrap: 'wrap',
   },
   controlButton: {
     flex: 1,
+    minWidth: '45%',
     backgroundColor: '#007AFF',
     paddingVertical: 12,
     paddingHorizontal: 16,
@@ -481,6 +574,15 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  revealAllButton: {
+    backgroundColor: '#FF3B30',
+    flex: 1,
+    minWidth: '45%',
+  },
+  revealAllButtonText: {
+    color: '#fff',
+    fontWeight: '700',
   },
   clueContainer: {
     marginTop: 24,
