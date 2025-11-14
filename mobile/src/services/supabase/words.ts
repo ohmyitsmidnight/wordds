@@ -1,7 +1,62 @@
 import { supabase } from './client';
 import { Word, WordFilters } from '@types/index';
 
+// Free Dictionary API response types
+interface DictionaryDefinition {
+  definition: string;
+  example?: string;
+}
+
+interface DictionaryMeaning {
+  partOfSpeech: string;
+  definitions: DictionaryDefinition[];
+}
+
+interface DictionaryResponse {
+  word: string;
+  phonetic?: string;
+  meanings: DictionaryMeaning[];
+}
+
 export class WordsService {
+  /**
+   * Fetch definition from Free Dictionary API
+   */
+  private async fetchDefinitionFromAPI(word: string): Promise<{
+    definition: string;
+    partOfSpeech?: string;
+    phonetic?: string;
+    example?: string;
+  } | null> {
+    try {
+      const response = await fetch(
+        `https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word)}`
+      );
+
+      if (!response.ok) {
+        return null;
+      }
+
+      const data: DictionaryResponse[] = await response.json();
+      
+      if (!data || data.length === 0 || !data[0].meanings || data[0].meanings.length === 0) {
+        return null;
+      }
+
+      const firstMeaning = data[0].meanings[0];
+      const firstDefinition = firstMeaning.definitions[0];
+
+      return {
+        definition: firstDefinition.definition,
+        partOfSpeech: firstMeaning.partOfSpeech,
+        phonetic: data[0].phonetic,
+        example: firstDefinition.example,
+      };
+    } catch (error) {
+      console.error('Free Dictionary API error:', error);
+      return null;
+    }
+  }
   /**
    * Fetch user's words with optional filters
    */
@@ -37,23 +92,43 @@ export class WordsService {
   }
 
   /**
-   * Add a new word
+   * Add a new word with automatic definition lookup
    */
   async addWord(userId: string, wordData: Partial<Word>) {
     try {
-      // First, try to get word definition from word_definitions table
-      const { data: definition } = await supabase
-        .from('word_definitions')
-        .select('*')
-        .eq('word_lower', wordData.word?.toLowerCase())
-        .single();
+      const wordText = wordData.word?.trim();
+      if (!wordText) {
+        throw new Error('Word is required');
+      }
 
+      // Fetch definition from Free Dictionary API
+      const apiResult = await this.fetchDefinitionFromAPI(wordText);
+      
+      let fetchStatus: 'success' | 'not_found' | 'failed' = 'not_found';
+      let fetchedDefinition: string | null = null;
+      let fetchError: string | null = null;
+
+      if (apiResult) {
+        fetchStatus = 'success';
+        fetchedDefinition = apiResult.definition;
+        if (apiResult.example) {
+          fetchedDefinition += `\n\nExample: ${apiResult.example}`;
+        }
+      } else {
+        fetchError = 'Definition not found in Free Dictionary API';
+      }
+
+      // Insert word with fetched definition
       const { data, error } = await supabase
         .from('words')
         .insert({
           user_id: userId,
-          word: wordData.word,
-          definition: definition?.definition || wordData.custom_definition || '',
+          word: wordText,
+          fetched_definition: fetchedDefinition,
+          definition_source: 'free_dictionary_api',
+          fetch_status: fetchStatus,
+          fetch_error: fetchError,
+          fetched_at: new Date().toISOString(),
           custom_definition: wordData.custom_definition,
           source: wordData.source || 'manual',
           status: 'learning',
@@ -76,17 +151,44 @@ export class WordsService {
   }
 
   /**
-   * Bulk import words
+   * Bulk import words with automatic definition lookup
    */
   async bulkImport(userId: string, words: string[], source: string) {
     try {
-      const wordsToInsert = words.map((word) => ({
-        user_id: userId,
-        word: word.trim(),
-        source,
-        status: 'learning',
-        mastery_level: 0,
-      }));
+      // Process words in parallel with definition lookup
+      const wordPromises = words.map(async (word) => {
+        const wordText = word.trim();
+        const apiResult = await this.fetchDefinitionFromAPI(wordText);
+        
+        let fetchStatus: 'success' | 'not_found' | 'failed' = 'not_found';
+        let fetchedDefinition: string | null = null;
+        let fetchError: string | null = null;
+
+        if (apiResult) {
+          fetchStatus = 'success';
+          fetchedDefinition = apiResult.definition;
+          if (apiResult.example) {
+            fetchedDefinition += `\n\nExample: ${apiResult.example}`;
+          }
+        } else {
+          fetchError = 'Definition not found in Free Dictionary API';
+        }
+
+        return {
+          user_id: userId,
+          word: wordText,
+          fetched_definition: fetchedDefinition,
+          definition_source: 'free_dictionary_api',
+          fetch_status: fetchStatus,
+          fetch_error: fetchError,
+          fetched_at: new Date().toISOString(),
+          source,
+          status: 'learning' as const,
+          mastery_level: 0,
+        };
+      });
+
+      const wordsToInsert = await Promise.all(wordPromises);
 
       const { data, error } = await supabase
         .from('words')

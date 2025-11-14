@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { WordsState, Word, WordSource } from '../types';
 import { wordsService } from '../services/supabase/words';
+import { useAuthStore } from './useAuthStore';
 
 export const useWordsStore = create<WordsState>((set, get) => ({
   words: [],
@@ -84,8 +85,7 @@ export const useWordsStore = create<WordsState>((set, get) => ({
 
   // Helper to get current user ID
   getUserId: () => {
-    // This would come from auth store
-    // For now, return empty - will be integrated with auth
-    return '';
+    const user = useAuthStore.getState().user;
+    return user?.id || null;
   },
 }));

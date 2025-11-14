@@ -23,8 +23,13 @@ export interface Word {
   id: number;
   user_id: string;
   word: string;
-  definition: string;
+  definition?: string; // Legacy field
   custom_definition?: string;
+  fetched_definition?: string; // Auto-fetched from API
+  definition_source?: string; // Source of definition
+  fetch_status?: 'pending' | 'success' | 'failed' | 'not_found';
+  fetch_error?: string;
+  fetched_at?: string;
   status: 'learning' | 'mastered' | 'archived';
   mastery_level: number; // 0-5
   source: WordSource;
